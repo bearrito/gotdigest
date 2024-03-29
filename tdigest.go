@@ -3,25 +3,47 @@ package gotdigest
 import (
 	"math"
 	"slices"
+
+	"github.com/vmihailenco/msgpack/v5"
 )
 
 type Centroid struct {
-	size int
-	mean float64
+	Size int
+	Mean float64
 }
 
 type TDigest struct {
-	centroids     []Centroid
-	delta         float64
-	shouldBuffer  bool
-	bufferMaxSize int
-	buffer        []float64
-	useNormalized bool
+	Centroids     []Centroid
+	delta         float64   `msgpack:"-"`
+	shouldBuffer  bool      `msgpack:"-"`
+	bufferMaxSize int       `msgpack:"-"`
+	buffer        []float64 `msgpack:"-"`
+	useNormalized bool      `msgpack:"-"`
 }
 
-func last(s *[]Centroid) *Centroid {
+func (d *TDigest) ToMsgPack() ([]byte, error) {
 
-	return &((*s)[len(*s)-1])
+	b, err := msgpack.Marshal(d)
+	if err != nil {
+		return nil, err
+
+	}
+	return b, nil
+}
+
+func FromMsgPack(b []byte) (TDigest, error) {
+
+	var digest TDigest
+	err := msgpack.Unmarshal(b, &digest)
+	if err != nil {
+		return digest, err
+	}
+	return digest, nil
+}
+
+func last(c *[]Centroid) *Centroid {
+
+	return &((*c)[len(*c)-1])
 }
 
 type unNormalizedPotential func(float64, float64) float64
@@ -67,9 +89,9 @@ func NewCentroidWithValue(val float64) Centroid {
 
 func NewDigestFromValues(vals ...float64) TDigest {
 	centroids := make([]Centroid, len(vals))
-	digest := TDigest{centroids: centroids}
+	digest := TDigest{Centroids: centroids}
 	for val := range vals {
-		digest.centroids = append(digest.centroids, NewCentroidWithValue(float64(val)))
+		digest.Centroids = append(digest.Centroids, NewCentroidWithValue(float64(val)))
 
 	}
 
@@ -79,19 +101,19 @@ func NewDigestFromValues(vals ...float64) TDigest {
 
 func (c *Centroid) weight() float64 {
 
-	return c.mean * float64(c.size)
+	return c.Mean * float64(c.Size)
 }
 
 func (c *Centroid) update(other Centroid) {
 
 	weight := c.weight() + other.weight()
-	c.size += other.size
-	c.mean = weight / float64(c.size)
+	c.Size += other.Size
+	c.Mean = weight / float64(c.Size)
 }
 
 func mergeCentroids(first Centroid, second Centroid) Centroid {
 
-	size := (first.size + second.size)
+	size := (first.Size + second.Size)
 	weight := first.weight() + second.weight()
 
 	return Centroid{size, weight / float64(size)}
@@ -111,7 +133,7 @@ func NewDigestFromBin(bin Centroid) TDigest {
 	bins := make([]Centroid, 1)
 	bins[0] = bin
 
-	return TDigest{centroids: bins}
+	return TDigest{Centroids: bins}
 
 }
 
@@ -130,16 +152,16 @@ func (d *TDigest) append(value float64) {
 			}
 			d.buffer = make([]float64, 0, d.bufferMaxSize)
 
-			digest := TDigest{centroids: centroids}
+			digest := TDigest{Centroids: centroids}
 			d.merge(&digest)
-			d.centroids = compressBins(d.centroids, d.delta)
+			d.Centroids = compressBins(d.Centroids, d.delta)
 		}
 
 	} else {
 		b := NewCentroidWithValue(value)
 		digest := NewDigestFromBin(b)
 		d.merge(&digest)
-		d.centroids = compressBins(d.centroids, d.delta)
+		d.Centroids = compressBins(d.Centroids, d.delta)
 	}
 
 }
@@ -147,8 +169,8 @@ func (d *TDigest) append(value float64) {
 func (d *TDigest) count() int {
 
 	count := 0
-	for _, bin := range d.centroids {
-		count += bin.size
+	for _, bin := range d.Centroids {
+		count += bin.Size
 
 	}
 	return count
@@ -157,36 +179,36 @@ func (d *TDigest) count() int {
 
 func (d *TDigest) merge(other *TDigest) {
 
-	size := len(d.centroids) + len(other.centroids)
+	size := len(d.Centroids) + len(other.Centroids)
 	merged := make([]Centroid, 0, size)
 
 	dCount := 0
 	otherCount := 0
-	for dCount < len(d.centroids) && otherCount < len(other.centroids) {
+	for dCount < len(d.Centroids) && otherCount < len(other.Centroids) {
 
-		if d.centroids[dCount].mean < other.centroids[otherCount].mean {
-			merged = append(merged, d.centroids[dCount])
+		if d.Centroids[dCount].Mean < other.Centroids[otherCount].Mean {
+			merged = append(merged, d.Centroids[dCount])
 			dCount++
 		} else {
 
-			merged = append(merged, other.centroids[otherCount])
+			merged = append(merged, other.Centroids[otherCount])
 			otherCount++
 
 		}
 
 	}
 
-	for dCount < len(d.centroids) {
-		merged = append(merged, d.centroids[dCount])
+	for dCount < len(d.Centroids) {
+		merged = append(merged, d.Centroids[dCount])
 		dCount++
 	}
 
-	for otherCount < len(other.centroids) {
-		merged = append(merged, other.centroids[otherCount])
+	for otherCount < len(other.Centroids) {
+		merged = append(merged, other.Centroids[otherCount])
 		otherCount++
 	}
 
-	d.centroids = merged
+	d.Centroids = merged
 }
 
 func compressBins(centroids []Centroid, delta float64) []Centroid {
@@ -197,14 +219,14 @@ func compressBins(centroids []Centroid, delta float64) []Centroid {
 
 	totalSize := 0
 	for _, centroid := range centroids {
-		totalSize += centroid.size
+		totalSize += centroid.Size
 
 	}
 
 	compressedCentroids := make([]Centroid, 0)
 	compressedCentroids = append(compressedCentroids, centroids[0])
 
-	accumulatedSize := compressedCentroids[0].size
+	accumulatedSize := compressedCentroids[0].Size
 
 	minPotential := k1Potential(0, delta)
 	i := 1
@@ -212,7 +234,7 @@ func compressBins(centroids []Centroid, delta float64) []Centroid {
 		nextCentroid := centroids[i]
 		i++
 
-		quotientIndex := float64((accumulatedSize + nextCentroid.size)) / float64(totalSize)
+		quotientIndex := float64((accumulatedSize + nextCentroid.Size)) / float64(totalSize)
 		if quotientIndex > 1.0 {
 			panic("Cannot have quantiles greater than 1.0")
 		}
@@ -224,7 +246,7 @@ func compressBins(centroids []Centroid, delta float64) []Centroid {
 			minPotential = k1Potential(quantile, delta)
 		}
 
-		accumulatedSize += nextCentroid.size
+		accumulatedSize += nextCentroid.Size
 
 	}
 
@@ -236,24 +258,24 @@ func (d *TDigest) quantile(quantile float64) float64 {
 
 	quantileIndex := quantile * float64(d.count())
 
-	maxQuantileIndex := float64(d.centroids[0].size) / 2.0
+	maxQuantileIndex := float64(d.Centroids[0].Size) / 2.0
 	if quantileIndex <= maxQuantileIndex {
-		return d.centroids[0].mean
+		return d.Centroids[0].Mean
 	}
 
-	for idx := 0; idx < len(d.centroids)-1; idx++ {
+	for idx := 0; idx < len(d.Centroids)-1; idx++ {
 
-		c1 := d.centroids[idx]
-		c2 := d.centroids[idx+1]
+		c1 := d.Centroids[idx]
+		c2 := d.Centroids[idx+1]
 
-		interval := float64(c1.size+c2.size) / 2.0
+		interval := float64(c1.Size+c2.Size) / 2.0
 		if quantileIndex <= maxQuantileIndex+interval {
 			k := (quantileIndex - maxQuantileIndex) / interval
-			return c1.mean*float64(1-k) + c2.mean*float64(k)
+			return c1.Mean*float64(1-k) + c2.Mean*float64(k)
 		}
 		maxQuantileIndex += interval
 	}
-	lastCentroid := last(&d.centroids)
-	return lastCentroid.mean
+	lastCentroid := last(&d.Centroids)
+	return lastCentroid.Mean
 
 }

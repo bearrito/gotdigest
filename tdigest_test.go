@@ -187,8 +187,8 @@ func TestK2Potentials(t *testing.T) {
 func TestBin(t *testing.T) {
 
 	bin := Centroid{1, 10}
-	require.Equal(t, bin.size, 1)
-	require.Equal(t, bin.mean, float64(10))
+	require.Equal(t, bin.Size, 1)
+	require.Equal(t, bin.Mean, float64(10))
 
 	require.Equal(t, bin.weight(), float64(10))
 
@@ -197,12 +197,12 @@ func TestBin(t *testing.T) {
 
 	mergedBin := mergeCentroids(bin, anotherBin)
 
-	require.Equal(t, mergedBin.size, 3)
-	require.Equal(t, mergedBin.mean, float64(10.0))
+	require.Equal(t, mergedBin.Size, 3)
+	require.Equal(t, mergedBin.Mean, float64(10.0))
 
 	bin.update(anotherBin)
-	require.Equal(t, bin.size, 3)
-	require.Equal(t, bin.mean, float64(10.0))
+	require.Equal(t, bin.Size, 3)
+	require.Equal(t, bin.Mean, float64(10.0))
 
 }
 
@@ -230,9 +230,9 @@ func TestTDigestConstructionAndFilling(t *testing.T) {
 	third := float64(3.5)
 	digest = NewDigestFromValues(first, second, third)
 	require.NotNil(t, digest)
-	require.Equal(t, digest.centroids[0].mean, first)
-	require.Equal(t, digest.centroids[1].mean, second)
-	require.Equal(t, digest.centroids[2].mean, third)
+	require.Equal(t, digest.Centroids[0].Mean, first)
+	require.Equal(t, digest.Centroids[1].Mean, second)
+	require.Equal(t, digest.Centroids[2].Mean, third)
 }
 
 func TestTDigestMerge(t *testing.T) {
@@ -242,8 +242,8 @@ func TestTDigestMerge(t *testing.T) {
 	for i := 0; i < 100; i++ {
 
 		// Sorted Set is a TDigest
-		digest1.centroids = append(digest1.centroids, Centroid{1, float64(i * 2)})
-		digest2.centroids = append(digest2.centroids, Centroid{1, float64(i*2 + 1)})
+		digest1.Centroids = append(digest1.Centroids, Centroid{1, float64(i * 2)})
+		digest2.Centroids = append(digest2.Centroids, Centroid{1, float64(i*2 + 1)})
 
 	}
 
@@ -251,10 +251,10 @@ func TestTDigestMerge(t *testing.T) {
 	// The result should just be a sorted set
 	digest1.merge(&digest2)
 
-	require.Equal(t, len(digest1.centroids), 200)
+	require.Equal(t, len(digest1.Centroids), 200)
 	for i := 0; i < 200; i++ {
 
-		require.Equal(t, digest1.centroids[i].mean, float64(i))
+		require.Equal(t, digest1.Centroids[i].Mean, float64(i))
 	}
 
 }
@@ -312,7 +312,7 @@ func TestTDigestStatisticsUnNormalized(t *testing.T) {
 			}
 
 			// require.Greater(t, float64(len(digest.centroids)), math.Floor(delta/2.0))
-			require.Less(t, float64(len(digest.centroids)), math.Ceil(delta))
+			require.Less(t, float64(len(digest.Centroids)), math.Ceil(delta))
 
 			minCentroid := digest.quantile(0.0)
 			maxCentroid := digest.quantile(1.0)
@@ -327,9 +327,9 @@ func TestTDigestStatisticsUnNormalized(t *testing.T) {
 			require.Less(t, digest.quantile(0.05), maxCentroid)
 			require.Greater(t, digest.quantile(0.05), minCentroid)
 
-			for i := 0; i < len(digest.centroids)-1; i++ {
+			for i := 0; i < len(digest.Centroids)-1; i++ {
 
-				require.Less(t, digest.centroids[i].mean, digest.centroids[i+1].mean)
+				require.Less(t, digest.Centroids[i].Mean, digest.Centroids[i+1].Mean)
 			}
 		})
 	}
@@ -389,7 +389,7 @@ func TestTDigestStatisticsNormalized(t *testing.T) {
 			}
 
 			// require.Greater(t, float64(len(digest.centroids)), math.Floor(delta/2.0))
-			require.Less(t, float64(len(digest.centroids)), math.Ceil(delta))
+			require.Less(t, float64(len(digest.Centroids)), math.Ceil(delta))
 
 			minCentroid := digest.quantile(0.0)
 			maxCentroid := digest.quantile(1.0)
@@ -404,11 +404,32 @@ func TestTDigestStatisticsNormalized(t *testing.T) {
 			require.Less(t, digest.quantile(0.05), maxCentroid)
 			require.Greater(t, digest.quantile(0.05), minCentroid)
 
-			for i := 0; i < len(digest.centroids)-1; i++ {
+			for i := 0; i < len(digest.Centroids)-1; i++ {
 
-				require.Less(t, digest.centroids[i].mean, digest.centroids[i+1].mean)
+				require.Less(t, digest.Centroids[i].Mean, digest.Centroids[i+1].Mean)
 			}
 		})
 	}
+
+}
+
+func TestMarshalling(t *testing.T) {
+
+	digest := TDigest{}
+	i := 0
+	centroids := make([]Centroid, 0, 100)
+	for i < 100 {
+
+		centroids = append(centroids, Centroid{1, float64(i)})
+		i++
+	}
+	digest.Centroids = centroids
+
+	b, err := digest.ToMsgPack()
+	require.Nil(t, err)
+	require.Greater(t, len(b), 0)
+	actualDigest, err := FromMsgPack(b)
+	require.Nil(t, err)
+	require.Equal(t, digest, actualDigest)
 
 }
